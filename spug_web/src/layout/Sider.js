@@ -74,10 +74,11 @@ class Sider extends React.Component {
 
   render() {
     return (
-      <Layout.Sider collapsed={this.props.collapsed} style={{height: '100vh', overflow: 'scroll'}}>
+      <Layout.Sider collapsed={this.props.collapsed}>
         <div className={styles.logo}>
-          <img src={logo} alt="Logo"/>
-          <img src={logoText} alt="logo-text" style={{marginLeft: 25, width: 70}} />
+          <p style={{fontFamily:'STKaiti', fontWeight:'bold',fontSize:'20px', color:'rgba(0, 200, 255, 10)'}}>
+              长征云运维平台
+          </p>
         </div>
         <Menu
           theme="dark"

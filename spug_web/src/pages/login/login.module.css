@@ -9,11 +9,16 @@
     flex-direction: column;
 }
 
+.mainContainer {
+    padding-top: 220px;
+    min-height: 94%;
+}
+
 .titleContainer {
     padding-top: 70px;
     text-align: center;
     font-size: 33px;
-    font-weight: 600;
+    font-weight: 800;
 }
 
 .titleContainer .logo {
@@ -21,13 +26,13 @@
     margin-right: 15px;
 }
 
-.titleContainer .desc {
+.titleContainer .title {
+    font-family: STKaiti;
     margin-top: 12px;
     margin-bottom: 40px;
-    color: rgba(0, 0, 0, .45);
-    font-size: 14px;
+    color: rgba(0, 200, 255, 10);
+    font-size: 30px;
     font-weight: 400;
-
 }
 
 .formContainer {
