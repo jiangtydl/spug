@@ -61,6 +61,7 @@ class HostSelector extends React.Component {
   }, {
     title: '主机名称',
     dataIndex: 'name',
+    ellipsis: true
   }, {
     title: '连结地址',
     dataIndex: 'hostname',
@@ -75,7 +76,7 @@ class HostSelector extends React.Component {
 
   render() {
     const {selectedRows} = this.state;
-    let data = store.records;
+    let data = store.permRecords;
     if (store.f_name) {
       data = data.filter(item => item['name'].toLowerCase().includes(store.f_name.toLowerCase()))
     }

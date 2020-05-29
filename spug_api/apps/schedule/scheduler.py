@@ -4,13 +4,15 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.events import EVENT_SCHEDULER_SHUTDOWN, EVENT_JOB_MAX_INSTANCES, EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from django_redis import get_redis_connection
 from django.utils.functional import SimpleLazyObject
 from django.db import close_old_connections
-from apps.schedule.models import Task
+from apps.schedule.models import Task, History
 from apps.notify.models import Notify
 from apps.schedule.executors import dispatch
+from apps.schedule.utils import auto_clean_schedule_history
 from apps.alarm.utils import auto_clean_records
 from django.conf import settings
 from libs import AttrDict, human_datetime
@@ -37,6 +39,11 @@ class Scheduler:
             return IntervalTrigger(seconds=int(trigger_args), timezone=cls.timezone)
         elif trigger == 'date':
             return DateTrigger(run_date=trigger_args, timezone=cls.timezone)
+        elif trigger == 'cron':
+            args = json.loads(trigger_args) if not isinstance(trigger_args, dict) else trigger_args
+            minute, hour, day, month, week = args['rule'].split()
+            return CronTrigger(minute=minute, hour=hour, day=day, month=month, week=week, start_date=args['start'],
+                               end_date=args['stop'])
         else:
             raise TypeError(f'unknown schedule policy: {trigger!r}')
 
@@ -57,17 +64,20 @@ class Scheduler:
                 score = 0
                 for item in event.retval:
                     score += 1 if item[1] else 0
-                Task.objects.filter(pk=event.job_id).update(
-                    latest_status=2 if score == len(event.retval) else 1 if score else 0,
-                    latest_run_time=human_datetime(event.scheduled_run_time),
-                    latest_output=json.dumps(event.retval)
+                history = History.objects.create(
+                    task_id=event.job_id,
+                    status=2 if score == len(event.retval) else 1 if score else 0,
+                    run_time=human_datetime(event.scheduled_run_time),
+                    output=json.dumps(event.retval)
                 )
+                Task.objects.filter(pk=event.job_id).update(latest=history)
                 if score != 0 and time.time() - counter.get(event.job_id, 0) > 3600:
                     counter[event.job_id] = time.time()
                     Notify.make_notify('schedule', '1', f'{obj.name} - 执行失败', '请在任务计划中查看失败详情')
 
     def _init_builtin_jobs(self):
         self.scheduler.add_job(auto_clean_records, 'cron', hour=0, minute=0)
+        self.scheduler.add_job(auto_clean_schedule_history, 'cron', hour=0, minute=0)
 
     def _init(self):
         self.scheduler.start()

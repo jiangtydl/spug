@@ -9,12 +9,13 @@ from apps.setting.utils import AppSetting
 from apps.setting.models import Setting
 import platform
 import ldap
+import smtplib
 
 
 class SettingView(View):
     def get(self, request):
-        settings = Setting.objects.exclude(key__in=('public_key', 'private_key'))
-        return json_response(settings)
+        data = Setting.objects.all()
+        return json_response(data)
 
     def post(self, request):
         form, error = JsonParser(
@@ -41,6 +42,27 @@ def ldap_test(request):
         except Exception as e:
             error = eval(str(e))
             return json_response(error=error['desc'])
+    return json_response(error=error)
+
+
+def email_test(request):
+    form, error = JsonParser(
+        Argument('server', help='请输入邮件服务地址'),
+        Argument('port', type=int, help='请输入邮件服务端口号'),
+        Argument('username', help='请输入邮箱账号'),
+        Argument('password', help='请输入密码/授权码'),
+    ).parse(request.body)
+    if error is None:
+        try:
+            if form.port == 465:
+                server = smtplib.SMTP_SSL(form.server, form.port)
+            else:
+                server = smtplib.SMTP(form.server, form.port)
+            server.login(form.username, form.password)
+            return json_response()
+        except Exception as e:
+            error = e.smtp_error.decode('utf-8')
+            return json_response(error=error)
     return json_response(error=error)
 
 

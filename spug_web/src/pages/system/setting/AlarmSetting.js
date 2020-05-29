@@ -4,12 +4,13 @@
  * Released under the MIT License.
  */
 import React from 'react';
-import { observer } from 'mobx-react';
-import { Button, Form, Input, Radio, message } from 'antd';
+import {observer} from 'mobx-react';
+import {Button, Form, Input, Radio, message, Popover} from 'antd';
 import styles from './index.module.css';
-import { http } from 'libs';
+import {http} from 'libs';
 import store from './store';
 import lds from 'lodash';
+
 
 @observer
 class AlarmSetting extends React.Component {
@@ -18,9 +19,21 @@ class AlarmSetting extends React.Component {
     this.setting = JSON.parse(lds.get(store.settings, 'mail_service.value', "{}"));
     this.state = {
       mode: this.setting['server'] === undefined ? '1' : '2',
-      spug_key: lds.get(store.settings, 'spug_key.value', "")
+      spug_key: lds.get(store.settings, 'spug_key.value', ""),
+      mail_test_loading: false,
     }
   }
+
+  handleEmailTest = () => {
+    this.props.form.validateFields((error, data) => {
+      if (!error) {
+        this.setState({mail_test_loading: true});
+        http.post('/api/setting/email_test/', data).then(()=> {
+          message.success('邮件服务连接成功')
+        }).finally(()=> this.setState({mail_test_loading: false}))
+      }
+    })
+  };
 
   _doSubmit = (formData) => {
     store.loading = true;
@@ -48,21 +61,29 @@ class AlarmSetting extends React.Component {
     }
   };
 
+
   render() {
     const {getFieldDecorator} = this.props.form;
     const {mode, spug_key} = this.state;
+    const spugWx = <img src="http://image.qbangmang.com/spug-weixin.jpeg" alt='spug'/>;
     return (
       <React.Fragment>
         <div className={styles.title}>报警服务设置</div>
-        <Form style={{maxWidth: 400}}>
+        <Form style={{maxWidth: 340}}>
           <Form.Item
             colon={false}
             label="调用凭据"
-            help={<span>该凭据用于调用spug内置的报警服务，请关注公众号<span style={{color: '#008dff'}}>Spug运维</span>在我的页面查看调用凭据。</span>}>
+            help={<span>如需要使用Spug内置的邮件和微信报警服务，请关注公众号
+              <span style={{color: '#008dff', cursor: 'pointer'}}>
+                  <Popover content={spugWx}>
+                    <span>Spug运维</span>
+                  </Popover>
+              </span>
+              在【我的】页面获取调用凭据，否则请留空。</span>}>
             <Input
               value={spug_key}
               onChange={e => this.setState({spug_key: e.target.value})}
-              placeholder="请输入"/>
+              placeholder="请输入Spug微信公众号获取到的Token"/>
           </Form.Item>
           <Form.Item colon={false} label="邮件服务" help="用于通过邮件方式发送报警信息">
             <Radio.Group
@@ -80,7 +101,7 @@ class AlarmSetting extends React.Component {
                     {required: true, message: '请输入邮件服务器地址'}
                   ]
                 })(
-                  <Input placeholder="请输入，例如：smtp.exmail.qq.com"/>
+                  <Input placeholder="例如：smtp.exmail.qq.com"/>
                 )}
               </Form.Item>
               <Form.Item labelCol={{span: 8}} wrapperCol={{span: 16}} required label="端口">
@@ -89,7 +110,7 @@ class AlarmSetting extends React.Component {
                     {required: true, message: '请输入邮件服务端口'}
                   ]
                 })(
-                  <Input placeholder="请输入，例如：465"/>
+                  <Input placeholder="例如：465"/>
                 )}
               </Form.Item>
               <Form.Item labelCol={{span: 8}} wrapperCol={{span: 16}} required label="邮箱账号">
@@ -98,7 +119,7 @@ class AlarmSetting extends React.Component {
                     {required: true, message: '请输入邮箱账号'}
                   ]
                 })(
-                  <Input placeholder="请输入，例如：dev@exmail.com"/>
+                  <Input placeholder="例如：dev@exmail.com"/>
                 )}
               </Form.Item>
               <Form.Item labelCol={{span: 8}} wrapperCol={{span: 16}} required label="密码/授权码">
@@ -107,21 +128,25 @@ class AlarmSetting extends React.Component {
                     {required: true, message: '请输入邮箱账号对应的密码或授权码'}
                   ]
                 })(
-                  <Input.Password placeholder="请输入邮箱账号对应的密码或授权码"/>
+                  <Input.Password placeholder="请输入对应的密码或授权码"/>
                 )}
               </Form.Item>
               <Form.Item labelCol={{span: 8}} wrapperCol={{span: 16}} label="发件人昵称">
                 {getFieldDecorator('nickname', {initialValue: this.setting['nickname']})(
-                  <Input placeholder="请输入"/>
+                  <Input placeholder="请输入发件人昵称"/>
                 )}
               </Form.Item>
             </div>
           </Form.Item>
+          <div>
           <Button
-            type="primary"
-            loading={store.loading}
-            style={{marginTop: 20}}
+            type="danger" loading={this.state.mail_test_loading}
+            style={{ display: mode === '1' ? 'none' : 'inline-block' ,marginRight: 10}}
+            onClick={this.handleEmailTest}>测试邮件服务</Button>
+          <Button
+            type="primary" loading={store.loading} style={{ marginTop: 20}}
             onClick={this.handleSubmit}>保存设置</Button>
+          </div>
         </Form>
       </React.Fragment>
     )

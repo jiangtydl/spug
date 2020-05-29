@@ -2,8 +2,6 @@
 # Copyright: (c) <spug.dev@gmail.com>
 # Released under the MIT License.
 from django.views.generic import View
-from django.shortcuts import render
-from django.http.response import HttpResponseBadRequest
 from django.db.models import F
 from libs import json_response, JsonParser, Argument
 from apps.setting.utils import AppSetting
@@ -11,38 +9,61 @@ from apps.host.models import Host
 from apps.app.models import Deploy
 from apps.schedule.models import Task
 from apps.monitor.models import Detection
+from apps.account.models import Role
 from libs.ssh import SSH, AuthenticationException
-from libs import human_datetime
+from libs import human_datetime, AttrDict
+from openpyxl import load_workbook
+import socket
 
 
 class HostView(View):
     def get(self, request):
+        host_id = request.GET.get('id')
+        if host_id:
+            if not request.user.has_host_perm(host_id):
+                return json_response(error='无权访问该主机，请联系管理员')
+            return json_response(Host.objects.get(pk=host_id))
         hosts = Host.objects.filter(deleted_by_id__isnull=True)
         zones = [x['zone'] for x in hosts.order_by('zone').values('zone').distinct()]
-        return json_response({'zones': zones, 'hosts': [x.to_dict() for x in hosts]})
+        perms = [x.id for x in hosts] if request.user.is_supper else request.user.host_perms
+        return json_response({'zones': zones, 'hosts': [x.to_dict() for x in hosts], 'perms': perms})
 
     def post(self, request):
         form, error = JsonParser(
             Argument('id', type=int, required=False),
             Argument('zone', help='请输入主机类型'),
             Argument('name', help='请输主机名称'),
-            Argument('username', help='请输入登录用户名'),
-            Argument('hostname', help='请输入主机名或IP'),
+            Argument('username', handler=str.strip, help='请输入登录用户名'),
+            Argument('hostname', handler=str.strip, help='请输入主机名或IP'),
             Argument('port', type=int, help='请输入SSH端口'),
             Argument('desc', required=False),
             Argument('password', required=False),
         ).parse(request.body)
         if error is None:
-            if Host.objects.filter(name=form.name, deleted_by_id__isnull=True).exists():
-                return json_response(error=f'已存在的主机名称【{form.name}】')
             if valid_ssh(form.hostname, form.port, form.username, form.pop('password')) is False:
                 return json_response('auth fail')
 
             if form.id:
                 Host.objects.filter(pk=form.pop('id')).update(**form)
+            elif Host.objects.filter(name=form.name, deleted_by_id__isnull=True).exists():
+                return json_response(error=f'已存在的主机名称【{form.name}】')
             else:
-                form.created_by = request.user
-                Host.objects.create(**form)
+                host = Host.objects.create(created_by=request.user, **form)
+                if request.user.role:
+                    request.user.role.add_host_perm(host.id)
+        return json_response(error=error)
+
+    def patch(self, request):
+        form, error = JsonParser(
+            Argument('id', type=int, required=False),
+            Argument('zone', help='请输入主机类别')
+        ).parse(request.body)
+        if error is None:
+            host = Host.objects.filter(pk=form.id).first()
+            if not host:
+                return json_response(error='未找到指定主机')
+            count = Host.objects.filter(zone=host.zone, deleted_by_id__isnull=True).update(zone=form.zone)
+            return json_response(count)
         return json_response(error=error)
 
     def delete(self, request):
@@ -62,6 +83,9 @@ class HostView(View):
             detection = Detection.objects.filter(type__in=('3', '4'), addr=form.id).first()
             if detection:
                 return json_response(error=f'监控中心的任务【{detection.name}】关联了该主机，请解除关联后再尝试删除该主机')
+            role = Role.objects.filter(host_perms__regex=fr'\D{form.id}\D').first()
+            if role:
+                return json_response(error=f'角色【{role.name}】的主机权限关联了该主机，请解除关联后再尝试删除该主机')
             Host.objects.filter(pk=form.id).update(
                 deleted_at=human_datetime(),
                 deleted_by=request.user,
@@ -69,12 +93,45 @@ class HostView(View):
         return json_response(error=error)
 
 
-def web_ssh(request, h_id):
-    host = Host.objects.filter(pk=h_id).first()
-    if not host:
-        return HttpResponseBadRequest('unknown host')
-    context = {'id': h_id, 'title': host.name, 'token': request.user.access_token}
-    return render(request, 'web_ssh.html', context)
+def post_import(request):
+    password = request.POST.get('password')
+    file = request.FILES['file']
+    ws = load_workbook(file, read_only=True)['Sheet1']
+    summary = {'invalid': [], 'skip': [], 'fail': [], 'network': [], 'success': []}
+    for i, row in enumerate(ws.rows):
+        if i == 0:  # 第1行是表头 略过
+            continue
+        if not all([row[x].value for x in range(5)]):
+            summary['invalid'].append(i)
+            continue
+        data = AttrDict(
+            zone=row[0].value,
+            name=row[1].value,
+            hostname=row[2].value,
+            port=row[3].value,
+            username=row[4].value,
+            password=row[5].value,
+            desc=row[6].value
+        )
+        if Host.objects.filter(hostname=data.hostname, port=data.port, username=data.username,
+                               deleted_by_id__isnull=True).exists():
+            summary['skip'].append(i)
+            continue
+        try:
+            if valid_ssh(data.hostname, data.port, data.username, data.pop('password') or password) is False:
+                summary['fail'].append(i)
+                continue
+        except AuthenticationException:
+            summary['fail'].append(i)
+            continue
+        except socket.error:
+            summary['network'].append(i)
+            continue
+        host = Host.objects.create(created_by=request.user, **data)
+        if request.user.role:
+            request.user.role.add_host_perm(host.id)
+        summary['success'].append(i)
+    return json_response(summary)
 
 
 def valid_ssh(hostname, port, username, password):
@@ -86,7 +143,7 @@ def valid_ssh(hostname, port, username, password):
         AppSetting.set('private_key', private_key, 'ssh private key')
         AppSetting.set('public_key', public_key, 'ssh public key')
     if password:
-        cli = SSH(hostname, port, username, password=password)
+        cli = SSH(hostname, port, username, password=str(password))
         code, out = cli.exec_command('mkdir -p -m 700 ~/.ssh && \
                 echo %r >> ~/.ssh/authorized_keys && \
                 chmod 600 ~/.ssh/authorized_keys' % public_key)

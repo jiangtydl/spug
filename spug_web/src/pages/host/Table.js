@@ -8,6 +8,7 @@ import { observer } from 'mobx-react';
 import { Table, Divider, Modal, message } from 'antd';
 import { LinkButton } from 'components';
 import ComForm from './Form';
+import ComImport from './Import';
 import http from 'libs/http';
 import store from './store';
 
@@ -53,7 +54,7 @@ class ComTable extends React.Component {
   }];
 
   handleConsole = (info) => {
-    window.open(`/api/host/ssh/${info.id}/?x-token=${localStorage.getItem('token')}`)
+    window.open(`/ssh/${info.id}`)
   };
 
   handleDelete = (text) => {
@@ -71,7 +72,7 @@ class ComTable extends React.Component {
   };
 
   render() {
-    let data = store.records;
+    let data = store.permRecords;
     if (store.f_name) {
       data = data.filter(item => item['name'].toLowerCase().includes(store.f_name.toLowerCase()))
     }
@@ -85,6 +86,7 @@ class ComTable extends React.Component {
       <React.Fragment>
         <Table rowKey="id" loading={store.isFetching} dataSource={data} columns={this.columns}/>
         {store.formVisible && <ComForm/>}
+        {store.importVisible && <ComImport/>}
       </React.Fragment>
     )
   }
