@@ -2,3 +2,11 @@
     width: 520px;
     margin: 0 auto 30px;
 }
+
+.iframe-container {
+  width: 520px;
+}
+
+#iframeZabbix {
+	border: 0 none;
+}

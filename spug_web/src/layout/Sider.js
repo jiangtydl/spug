@@ -77,7 +77,7 @@ class Sider extends React.Component {
       <Layout.Sider collapsed={this.props.collapsed}>
         <div className={styles.logo}>
           <p style={{fontFamily:'STKaiti', fontWeight:'bold',fontSize:'20px', color:'rgba(0, 200, 255, 10)'}}>
-              长征云运维平台
+              长征云运维系统
           </p>
         </div>
         <Menu
