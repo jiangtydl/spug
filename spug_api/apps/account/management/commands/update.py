@@ -37,12 +37,21 @@ class Command(BaseCommand):
         # update api
         commands = [
             f'cd {settings.BASE_DIR}',
-            'git fetch --tags',
+            f'git fetch origin refs/tags/{version}:refs/tags/{version} --no-tags',
             f'git checkout {version}'
         ]
         task = subprocess.Popen(' && '.join(commands), shell=True)
         if task.wait() != 0:
             return self.stderr.write(self.style.ERROR('获取更新失败，排除网络问题后可至官方论坛反馈。'))
+
+        # update dep
+        commands = [
+            f'cd {settings.BASE_DIR}',
+            'pip install -r requirements.txt'
+        ]
+        task = subprocess.Popen(' && '.join(commands), shell=True)
+        if task.wait() != 0:
+            return self.stderr.write(self.style.ERROR('更新依赖包失败，排除网络问题后可至官方论坛反馈。'))
 
         # update db
         apps = [x.split('.')[-1] for x in settings.INSTALLED_APPS if x.startswith('apps.')]
@@ -50,5 +59,6 @@ class Command(BaseCommand):
         call_command('migrate')
 
         self.stdout.write(self.style.SUCCESS('''升级成功，请自行重启服务，如果通过官方文档安装一般重启命令为
+        Docker: docker restart $CONTAINER_ID
         Centos: systemctl restart supervisord 
         Ubuntu: systemctl restart supervisor'''))
