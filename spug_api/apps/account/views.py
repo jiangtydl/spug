@@ -30,6 +30,8 @@ class UserView(View):
             Argument('role_id', type=int, help='请选择角色'),
         ).parse(request.body)
         if error is None:
+            if User.objects.filter(username=form.username, deleted_by_id__isnull=True).exists():
+                return json_response(error=f'已存在登录名为【{form.username}】的用户')
             form.password_hash = User.make_password(form.pop('password'))
             form.created_by = request.user
             User.objects.create(**form)
@@ -89,7 +91,8 @@ class RoleView(View):
         form, error = JsonParser(
             Argument('id', type=int, help='参数错误'),
             Argument('page_perms', type=dict, required=False),
-            Argument('deploy_perms', type=dict, required=False)
+            Argument('deploy_perms', type=dict, required=False),
+            Argument('host_perms', type=list, required=False)
         ).parse(request.body)
         if error is None:
             role = Role.objects.filter(pk=form.pop('id')).first()
@@ -99,6 +102,8 @@ class RoleView(View):
                 role.page_perms = json.dumps(form.page_perms)
             if form.deploy_perms is not None:
                 role.deploy_perms = json.dumps(form.deploy_perms)
+            if form.host_perms is not None:
+                role.host_perms = json.dumps(form.host_perms)
             role.user_set.update(token_expired=0)
             role.save()
         return json_response(error=error)

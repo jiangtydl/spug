@@ -10,7 +10,9 @@ import history from 'libs/history';
 import {http, updatePermissions} from 'libs';
 import logo from 'layout/logo-spug-txt.png';
 import envStore from 'pages/config/environment/store';
+import appStore from 'pages/config/app/store';
 import requestStore from 'pages/deploy/request/store';
+import hostStore from 'pages/host/store';
 
 class LoginIndex extends React.Component {
   constructor(props) {
@@ -23,8 +25,10 @@ class LoginIndex extends React.Component {
 
   componentDidMount() {
     envStore.records = [];
+    appStore.records = [];
     requestStore.records = [];
-    requestStore.deploys = []
+    requestStore.deploys = [];
+    hostStore.records = [];
   }
 
   handleSubmit = () => {
